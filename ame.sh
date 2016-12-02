@@ -11,6 +11,7 @@ function ame_init() {
     done
     if [ ! -d ~/.ame ]; then
         mkdir -p ~/.ame
+        mkdir -p ~/.ame/tmp
     fi
     if [ ! -f ~/.ame/map000.pnm ]; then
         convert http://tokyo-ame.jwa.or.jp/map/map000.jpg ~/.ame/map000.pnm
@@ -18,60 +19,60 @@ function ame_init() {
     if [ ! -f ~/.ame/msk000.png ]; then
         curl -s -o ~/.ame/msk000.png http://tokyo-ame.jwa.or.jp/map/msk000.png
     fi
+    if [ ! -f ~/.ame/base.png ]; then
+        convert ~/.ame/map000.pnm ~/.ame/msk000.png -gravity south -compose over -composite ~/.ame/base.png
+    fi
 }
 
-function ame_print() {
+function ame_create() {
     SIZE="640x"
     TIME=$1
     LABEL=${TIME:8:2}:${TIME:10}
     URI=http://tokyo-ame.jwa.or.jp/mesh/000/${TIME}.gif
-    convert -compose over ~/.ame/map000.pnm \
-            $URI \
-            -composite ~/.ame/msk000.png \
-            -undercolor white -stroke gray -pointsize 26 -gravity south -annotate 0 " ${LABEL} " \
-            -resize ${SIZE} \
-            -composite sixel:-
+    convert ~/.ame/base.png $URI \
+            -gravity south -undercolor white \
+            -stroke gray -pointsize 26 -annotate 0 "  $LABEL " \
+            -compose over -composite ~/.ame/tmp/$LABEL.png
+}
+
+function ame_print() {
+    convert -layers optimize -delay 50 ~/.ame/tmp/*.png ~/.ame/tmp/ame.gif
+    cat ~/.ame/tmp/ame.gif|imgcat
+    rm -f ~/.ame/tmp/*.png
 }
 
 function ame_last() {
     LAST=`curl -s http://tokyo-ame.jwa.or.jp/scripts/mesh_index.js \
-           |sed -e 's/[^0-9,]//g' -e 's/,/\n/g'|head -1`
-    ame_print "${LAST}"
+          |grep -o -E '([0-9])+'|head -1`
+    ame_create "${LAST}"
 }
 
 function ame_play() {
+    LENGTH=13
     INDEX=`curl -s http://tokyo-ame.jwa.or.jp/scripts/mesh_index.js \
-         |sed -e 's/[^0-9,]//g' -e 's/,/\n/g'|tac`
-    declare -a TIMES=()
+         |grep -o -E '([0-9])+'|head -$LENGTH`
+    NOW=0
     for t in $INDEX; do
         TIMES+=( ${t} )
-        ame_print $t
-        sleep 0.5
-    done
-    i=$((${#TIMES[@]}-1))
-    while IFS= read -r -n1 -s c; do
-        if [[ $c == $'\x1b' ]]; then
-            read -r -n2 -s rest
-            c+="$rest"
-        fi
-        case $c in
-            l | j | $'\x1b\x5b\x43' | $'\x1b\x5b\x42')
-                let i++
-                if [ $i -ge ${#TIMES[@]} ]; then
-                    i=$((${#TIMES[@]}-1))
+        ame_create $t
+        B=""
+        for i in `seq 1 $LENGTH`
+        do
+            if [ $NOW -eq $i ]
+            then
+                B="$B>"
+            else
+                if [ $i -le $NOW ]
+                then
+                    B="$B-"
+                else
+                    B="$B "
                 fi
-                ame_print ${TIMES[$i]}
-                echo "time: ${TIMES[$i]}"
-                ;;
-            h | k | $'\x1b\x5b\x44' | $'\x1b\x5b\x41')
-                let i--
-                if [ $i -lt 0 ]; then
-                    i=0
-                fi
-                ame_print ${TIMES[$i]}
-                echo "time: ${TIMES[$i]}"
-                ;;
-        esac
+            fi
+        done
+        P=`expr $NOW \* 100 / $LENGTH`
+        echo -en " loading...  [$B] $P %\r"
+        NOW=`expr $NOW + 1`
     done
 }
 
@@ -89,6 +90,7 @@ do
         p)
             ame_init
             ame_play
+            ame_print
             exit
             ;;
     esac
@@ -96,3 +98,4 @@ done
 
 ame_init
 ame_last
+ame_print
