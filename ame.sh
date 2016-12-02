@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ame.sh
+# ame.sh for macOS on iTerm2
 
 function ame_init() {
     deps=(curl convert)
@@ -31,7 +31,7 @@ function ame_create() {
     URI=http://tokyo-ame.jwa.or.jp/mesh/000/${TIME}.gif
     convert ~/.ame/base.png $URI \
             -gravity south -undercolor white \
-            -stroke gray -pointsize 26 -annotate 0 "  $LABEL " \
+            -stroke gray -pointsize 26 -annotate 0 " $LABEL " \
             -compose over -composite ~/.ame/tmp/$LABEL.png
 }
 
